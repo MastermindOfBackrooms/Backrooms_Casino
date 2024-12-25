@@ -46,7 +46,7 @@ def display_hand(hand, hide_first=False):
             cards.append(f'[white]{rank}{suit}[/white]')
     return ' '.join(cards)
 
-def dramatic_card_deal(card, is_dealer=False):
+def dramatic_card_deal(card, is_dealer=False, hide_card=False):
     console.print("\n[cyan]Distribuzione carta...[/cyan]")
     with Progress() as progress:
         task = progress.add_task("[cyan]", total=100)
@@ -55,9 +55,33 @@ def dramatic_card_deal(card, is_dealer=False):
             time.sleep(0.01)
 
     prefix = "[red]Il Banchiere[/red]" if is_dealer else "[cyan]Tu[/cyan]"
-    rank, suit = card
-    console.print(f"{prefix} ricevi: [white]{rank}{suit}[/white]")
+    if hide_card:
+        console.print(f"{prefix} riceve: [red]?? ?[/red]")
+    else:
+        rank, suit = card
+        console.print(f"{prefix} riceve: [white]{rank}{suit}[/white]")
     time.sleep(0.5)
+
+def get_cash_out_percentage(score):
+    """
+    Calcola la percentuale di rimborso in base al punteggio della mano
+    """
+    if score >= 20:
+        return 0.9  # 90% della puntata
+    elif score >= 19:
+        return 0.8  # 80% della puntata
+    elif score >= 18:
+        return 0.7  # 70% della puntata
+    elif score >= 17:
+        return 0.6  # 60% della puntata
+    elif score >= 16:
+        return 0.5  # 50% della puntata
+    elif score >= 15:
+        return 0.4  # 40% della puntata
+    elif score >= 14:
+        return 0.3  # 30% della puntata
+    else:
+        return 0.2  # 20% della puntata
 
 def play(state, banker):
     deck = create_deck()
@@ -86,20 +110,33 @@ def play(state, banker):
         player_hand = []
         dealer_hand = []
 
-        for _ in range(2):
-            new_card = deck.pop()
-            dramatic_card_deal(new_card)
-            player_hand.append(new_card)
+        # Distribuisci prima carta al giocatore
+        new_card = deck.pop()
+        dramatic_card_deal(new_card)
+        player_hand.append(new_card)
 
-            new_card = deck.pop()
-            dramatic_card_deal(new_card, is_dealer=True)
-            dealer_hand.append(new_card)
+        # Prima carta al banchiere (nascosta)
+        new_card = deck.pop()
+        dramatic_card_deal(new_card, is_dealer=True, hide_card=True)
+        dealer_hand.append(new_card)
+
+        # Seconda carta al giocatore
+        new_card = deck.pop()
+        dramatic_card_deal(new_card)
+        player_hand.append(new_card)
+
+        # Seconda carta al banchiere (visibile)
+        new_card = deck.pop()
+        dramatic_card_deal(new_card, is_dealer=True)
+        dealer_hand.append(new_card)
 
         while True:
             console.print("\n[purple]Mano del Banchiere:[/purple]", display_hand(dealer_hand, hide_first=True))
             console.print("[cyan]La tua mano:[/cyan]", display_hand(player_hand))
 
             player_value = hand_value(player_hand)
+            console.print(f"[green]Il tuo punteggio totale: {player_value}[/green]")
+
             if player_value == 21:
                 console.print("[green]Blackjack![/green]")
                 banker.win_response('big_win')
@@ -111,12 +148,21 @@ def play(state, banker):
                 state.update_chips(-bet)
                 break
 
-            action = Prompt.ask("Cosa vuoi fare", choices=["carta", "stai"])
+            action = Prompt.ask("Cosa vuoi fare", choices=["carta", "stai", "cash_out"])
 
             if action == "carta":
                 new_card = deck.pop()
                 dramatic_card_deal(new_card)
                 player_hand.append(new_card)
+            elif action == "cash_out":
+                cash_out_percentage = get_cash_out_percentage(player_value)
+                cash_out_value = int(bet * cash_out_percentage)
+                console.print(f"\n[yellow]Con un punteggio di {player_value}, puoi ottenere il {int(cash_out_percentage * 100)}% della tua puntata ({cash_out_value} fiches)[/yellow]")
+                if Prompt.ask(f"\nVuoi incassare {cash_out_value} fiches?", choices=["s", "n"]) == "s":
+                    console.print(f"[green]Hai incassato {cash_out_value} fiches![/green]")
+                    state.update_chips(-bet + cash_out_value)  # Sottrai la puntata e aggiungi il valore del cash out
+                    break
+                continue
             else:
                 # Turno del Banchiere
                 console.print("\n[purple]Mano del Banchiere:[/purple]", display_hand(dealer_hand))

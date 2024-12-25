@@ -6,8 +6,69 @@ import time
 
 console = Console()
 
+# Achievement del Craps
+CRAPS_ACHIEVEMENTS = {
+    "seventh_heaven": "Completa Seven's Heaven 7 volte",
+    "devils_dancer": "Vinci la Seven Devils' Dance con 7 vittorie consecutive",
+    "prophecy_master": "Indovina 7 Seven's Prophecy consecutive",
+    "banker_doom": "Sconfiggi il Banker's Doom 3 volte",
+    "craps_legend": "Sblocca tutti gli achievement dei dadi nel Craps"
+}
+
 def roll_dice(num_dice=2):
-    return [random.randint(1, 6) for _ in range(num_dice)]
+    """
+    Genera il lancio dei dadi e restituisce una lista di risultati
+    """
+    dice_results = [random.randint(1, 6) for _ in range(num_dice)]
+    if hasattr(roll_dice, 'consecutive_sevens'):
+        if sum(dice_results) == 7:
+            roll_dice.consecutive_sevens += 1
+        else:
+            roll_dice.consecutive_sevens = 0
+    else:
+        roll_dice.consecutive_sevens = 1 if sum(dice_results) == 7 else 0
+
+    return dice_results
+
+def check_craps_achievement(state, achievement_type, progress=1):
+    """
+    Verifica e aggiorna gli achievement del giocatore nel Craps
+    """
+    if not hasattr(state, 'craps_achievements'):
+        state.craps_achievements = {}
+
+    if achievement_type not in state.craps_achievements:
+        state.craps_achievements[achievement_type] = 0
+
+    state.craps_achievements[achievement_type] += progress
+
+    # Verifica se l'achievement è stato completato
+    if achievement_type == "seventh_heaven" and state.craps_achievements[achievement_type] >= 7:
+        console.print("[green]Achievement Sbloccato: Seventh Heaven Master![/green]")
+        state.chips += 7777
+        return True
+    elif achievement_type == "devils_dancer" and state.craps_achievements[achievement_type] >= 7:
+        console.print("[green]Achievement Sbloccato: Master of the Devils' Dance![/green]")
+        state.chips += 17777
+        return True
+    elif achievement_type == "prophecy_master" and state.craps_achievements[achievement_type] >= 7:
+        console.print("[green]Achievement Sbloccato: Prophet of the Sevens![/green]")
+        state.chips += 27777
+        return True
+    elif achievement_type == "banker_doom" and state.craps_achievements[achievement_type] >= 3:
+        console.print("[green]Achievement Sbloccato: Doom Bringer![/green]")
+        state.chips += 77777
+        return True
+
+    # Verifica se tutti gli achievement sono stati sbloccati
+    if all(state.craps_achievements.get(ach, 0) >= required for ach, required in
+           [("seventh_heaven", 7), ("devils_dancer", 7), ("prophecy_master", 7),
+            ("banker_doom", 3)]):
+        console.print("[gold]Achievement Supremo Sbloccato: Craps Legend![/gold]")
+        state.chips += 777777  # Bonus leggendario
+        return True
+
+    return False
 
 def check_come_out_roll(total):
     if total in [7, 11]:
@@ -26,50 +87,98 @@ def show_betting_options(point=None, chips=0):
         table.add_row("1", "Pass Line", "1:1")
         table.add_row("2", "Don't Pass", "1:1")
         table.add_row("3", "Lucky 7 (Somma 7)", "7:1")
-        table.add_row("4", "Seventh Sign (7 consecutivi)", "77:1")
-        table.add_row("5", "Seven's Prophecy", "17:1")
-        if chips >= 7777:
-            table.add_row("6", "Banker's Doom (Richiede 7777+ fiches)", "777:1")
-        table.add_row("7", "Triple Seven's Curse", "777:1")
-        table.add_row("8", "Seven Devils' Dance", "7x-77x")
     else:
         table.add_row("1", f"Point è {point}", "1:1")
         table.add_row("2", "Field (2,3,4,9,10,11,12)", "1:1, 2:1 per 2/12")
         table.add_row("3", "Any Craps (2,3,12)", "7:1")
-        table.add_row("4", "Seven's Heaven (7 in 7 tiri)", "77:1")
-        table.add_row("5", "Mystical Field (7,17,27)", "27:1")
 
     console.print(table)
 
-def animate_roll(banker):
-    console.print("\n[cyan]I dadi danzano nell'aria...[/cyan]")
-    time.sleep(1)
+def animate_roll(banker, special_roll=False):
+    if special_roll:
+        console.print("\n[red]I dadi brillano di un'aura mistica...[/red]")
+        time.sleep(1.5)
+        banker.special_message("777_ritual")
+    else:
+        console.print("\n[cyan]I dadi danzano nell'aria...[/cyan]")
+        time.sleep(1)
     banker.game_taunt('craps')
     time.sleep(1)
+
+def check_special_777_events(dice_results, bet_amount, state, banker):
+    """Verifica e gestisce eventi speciali legati al 777"""
+    total = sum(dice_results)
+
+    # Evento: Triple Seven's Path (3 lanci consecutivi che sommano 7)
+    if total == 7:
+        if not hasattr(state, 'seven_streak'):
+            state.seven_streak = 1
+        else:
+            state.seven_streak += 1
+
+        if state.seven_streak == 3:
+            console.print("\n[red]✧･ﾟ TRIPLE SEVEN'S PATH COMPLETATO! ･ﾟ✧[/red]")
+            bonus = bet_amount * 777
+            state.chips += bonus
+            check_craps_achievement(state, "seventh_heaven")
+            banker.special_message("777_ritual")
+            state.seven_streak = 0  # Reset dopo il bonus
+            return True
+    else:
+        if hasattr(state, 'seven_streak'):
+            state.seven_streak = 0
+
+    # Evento: Seven's Resonance (due dadi uguali che sommano con l'altro a 7)
+    if dice_results[0] == dice_results[1] and total == 7:
+        console.print("\n[red]✧･ﾟ SEVEN'S RESONANCE! ･ﾟ✧[/red]")
+        bonus = bet_amount * 77
+        state.chips += bonus
+        banker.special_message("777_ritual")
+        return True
+
+    # Evento: Mystic Seven (somma dei dadi è un multiplo di 7)
+    if total % 7 == 0:
+        console.print("\n[red]✧･ﾟ MYSTIC SEVEN! ･ﾟ✧[/red]")
+        multiplier = (total // 7) * 7  # Il moltiplicatore aumenta con i multipli di 7
+        bonus = bet_amount * multiplier
+        state.chips += bonus
+        banker.special_message("777_ritual")
+        return True
+
+    # Evento: Seven's Prophecy (previsione del prossimo lancio)
+    if not hasattr(state, 'prophecy_active'):
+        state.prophecy_active = False
+        state.prophecy_target = None
+
+    if not state.prophecy_active and random.random() < 0.07:  # 7% di probabilità
+        state.prophecy_active = True
+        state.prophecy_target = 7
+        console.print("\n[yellow]Il Banchiere sussurra: 'Il prossimo lancio porterà il numero sacro...'[/yellow]")
+    elif state.prophecy_active:
+        if total == state.prophecy_target:
+            console.print("\n[red]✧･ﾟ LA PROFEZIA SI AVVERA! ･ﾟ✧[/red]")
+            bonus = bet_amount * 77
+            state.chips += bonus
+            check_craps_achievement(state, "prophecy_master")
+            banker.special_message("777_ritual")
+        state.prophecy_active = False
+        state.prophecy_target = None
+
+    return False
 
 def play(state, banker):
     while True:
         console.print("\n[yellow]♠ CRAPS - Il Gioco dei Dadi ♠[/yellow]")
-        console.print("\n[red]Level 777 Special Edition[/red]")
         console.print(f"\nLe tue fiches: {state.chips}")
 
         if state.chips <= 0:
             console.print("[red]Non hai abbastanza fiches per giocare![/red]")
             return
 
-        # Nuove variabili per le varianti speciali
-        seventh_sign_active = False
-        seventh_sign_count = 0
-        prophecy_active = False
-        prophecy_numbers = []
-        triple_seven_count = 0
-        devils_dance_active = False
-        devils_dance_multiplier = 7
-
         point = None
         show_betting_options(point, state.chips)
 
-        bet_type = Prompt.ask("Scegli il tipo di scommessa", choices=["1", "2", "3", "4", "5", "6", "7", "8", "E"])
+        bet_type = Prompt.ask("Scegli il tipo di scommessa", choices=["1", "2", "3", "E"])
         if bet_type == "E":
             break
 
@@ -80,120 +189,17 @@ def play(state, banker):
 
         state.chips -= bet_amount
 
-        # Gestione delle varianti speciali
-        if bet_type == "6" and state.chips >= 7777:  # Banker's Doom
-            console.print("\n[red]⚠️ BANKER'S DOOM ATTIVATO ⚠️[/red]")
-            banker.special_message("777")
-            animate_roll(banker)
-            rolls = [sum(roll_dice()) for _ in range(3)]
-            if all(r == 7 for r in rolls):
-                winnings = bet_amount * 777
-                state.chips += winnings
-                console.print(f"\n[green]🎲 BANKER'S DOOM! Hai vinto {winnings} fiches! 🎲[/green]")
-                banker.win_response('devils_defeated')
-            else:
-                console.print("\n[red]Il Banchiere ride della tua sfortuna...[/red]")
-                banker.lose_response('devils_defeat')
-            continue
-
-        if bet_type == "7":  # Triple Seven's Curse
-            console.print("\n[purple]Triple Seven's Curse Attivata[/purple]")
-            for i in range(3):
-                animate_roll(banker)
-                roll = sum(roll_dice())
-                if roll == 7:
-                    triple_seven_count += 1
-                    console.print(f"[cyan]Seven #{triple_seven_count}![/cyan]")
-                else:
-                    break
-
-            if triple_seven_count == 3:
-                winnings = bet_amount * 777
-                state.chips += winnings
-                console.print(f"\n[green]🎲 TRIPLE SEVEN'S CURSE! Hai vinto {winnings} fiches! 🎲[/green]")
-                banker.win_response('mystical_sequence')
-            else:
-                console.print("\n[red]La maledizione si è spezzata...[/red]")
-                banker.lose_response('normal')
-            continue
-
-        if bet_type == "8":  # Seven Devils' Dance
-            console.print("\n[red]Seven Devils' Dance Iniziata[/red]")
-            devils_dance_active = True
-            devils_dance_wins = 0
-
-            for dance_round in range(7):
-                console.print(f"\n[red]Danza #{dance_round + 1}[/red]")
-                console.print(f"[yellow]Moltiplicatore attuale: x{devils_dance_multiplier}[/yellow]")
-
-                animate_roll(banker)
-                roll = sum(roll_dice())
-
-                if roll == 7:
-                    devils_dance_wins += 1
-                    winnings = bet_amount * devils_dance_multiplier
-                    state.chips += winnings
-                    console.print(f"[green]Vittoria! +{winnings} fiches[/green]")
-                    devils_dance_multiplier += 10
-                    banker.win_response('streak')
-                else:
-                    console.print("[red]I demoni vincono questo round...[/red]")
-                    banker.lose_response('devils_defeat')
-                    devils_dance_multiplier = max(7, devils_dance_multiplier - 5)
-
-                time.sleep(1)
-
-            if devils_dance_wins >= 4:
-                bonus = bet_amount * 77
-                state.chips += bonus
-                console.print(f"\n[green]BONUS DEVILS' DANCE! +{bonus} fiches[/green]")
-                banker.win_response('devils_defeated')
-            continue
-
-
-        # Gestione delle varianti speciali pre-point
-        if bet_type == "4" and point is None:  # Seventh Sign
-            console.print("\n[cyan]Seventh Sign Attivato[/cyan]")
-            seventh_sign_active = True
-            seventh_sign_count = 0
-        elif bet_type == "5" and point is None:  # Seven's Prophecy
-            console.print("\n[cyan]Seven's Prophecy Attivata[/cyan]")
-            prophecy_active = True
-            prophecy_numbers = []
-
         # Prima fase: Come Out roll
         console.print("\n[cyan]Come Out Roll[/cyan]")
         dice = roll_dice()
+        animate_roll(banker, special_roll=roll_dice.consecutive_sevens >= 2)
         total = sum(dice)
         console.print(f"Dadi: {dice} (Totale: {total})")
 
-        # Gestione Seven's Prophecy
-        if prophecy_active:
-            prophecy_numbers.append(total)
-            if len(prophecy_numbers) == 3:
-                if all(n % 7 == 0 for n in prophecy_numbers):
-                    winnings = bet_amount * 17
-                    state.chips += winnings
-                    console.print(f"[green]Profezia del Sette completata! Hai vinto {winnings} fiches![/green]")
-                    banker.special_message("777")
-                else:
-                    console.print("[red]La profezia è fallita![/red]")
-                continue
-
-        # Gestione Seventh Sign
-        if seventh_sign_active:
-            if total == 7:
-                seventh_sign_count += 1
-                console.print(f"[cyan]Seventh Sign: {seventh_sign_count}/7[/cyan]")
-                if seventh_sign_count == 7:
-                    winnings = bet_amount * 77
-                    state.chips += winnings
-                    console.print(f"[green]SEVENTH SIGN COMPLETATO! Hai vinto {winnings} fiches![/green]")
-                    banker.special_message("777")
-                    continue
-            else:
-                console.print("[red]Seventh Sign fallito![/red]")
-                continue
+        # Verifica eventi speciali 777
+        special_event = check_special_777_events(dice, bet_amount, state, banker)
+        if special_event:
+            time.sleep(2)  # Pausa per l'effetto drammatico
 
         result = check_come_out_roll(total)
 
@@ -201,28 +207,16 @@ def play(state, banker):
             winnings = bet_amount * 2
             state.chips += winnings
             console.print(f"[green]Hai vinto {winnings} fiches![/green]")
-            if total == 7:
-                banker.special_message("777")
+            won = True
         elif result == "lose" and bet_type == "1" or result == "win" and bet_type == "2":
             console.print("[red]Hai perso![/red]")
         else:
             point = total
             console.print(f"\n[yellow]Point è {point}[/yellow]")
 
-            seven_counter = 0
-            rolls_remaining = 7
-            heavens_bet = 0
-
-            if Prompt.ask("\nVuoi tentare Seven's Heaven? (7 in 7 tiri)", choices=["s", "n"]) == "s":
-                heavens_bet = int(Prompt.ask("Quanto vuoi scommettere su Seven's Heaven?", default="5"))
-                while heavens_bet > state.chips or heavens_bet <= 0:
-                    console.print("[red]Scommessa non valida![/red]")
-                    heavens_bet = int(Prompt.ask("Quanto vuoi scommettere?", default="5"))
-                state.chips -= heavens_bet
-
             while True:
                 show_betting_options(point, state.chips)
-                bet_choice = Prompt.ask("Vuoi fare una scommessa aggiuntiva?", choices=["1", "2", "3", "4", "5", "N"])
+                bet_choice = Prompt.ask("Vuoi fare una scommessa aggiuntiva?", choices=["1", "2", "3", "N"])
 
                 if bet_choice == "N":
                     break
@@ -237,33 +231,22 @@ def play(state, banker):
                 total = sum(dice)
                 console.print(f"\nDadi: {dice} (Totale: {total})")
 
-                # Conteggio per Seven's Heaven
-                if heavens_bet > 0:
-                    rolls_remaining -= 1
-                    if total == 7:
-                        seven_counter += 1
-                        console.print(f"[cyan]Seven's Heaven: {seven_counter}/7 (Tiri rimasti: {rolls_remaining})[/cyan]")
+                # Verifica eventi speciali 777 per le scommesse aggiuntive
+                special_event = check_special_777_events(dice, side_bet, state, banker)
+                if special_event:
+                    time.sleep(2)  # Pausa per l'effetto drammatico
 
-                # Gestione scommesse aggiuntive
                 if bet_choice == "2" and total in [2, 3, 4, 9, 10, 11, 12]:
                     multiplier = 2 if total in [2, 12] else 1
                     winnings = side_bet * (multiplier + 1)
                     state.chips += winnings
                     console.print(f"[green]Hai vinto {winnings} fiches sulla scommessa Field![/green]")
+                    won = True
                 elif bet_choice == "3" and total in [2, 3, 12]:
                     winnings = side_bet * 8
                     state.chips += winnings
                     console.print(f"[green]Hai vinto {winnings} fiches su Any Craps![/green]")
-                elif bet_choice == "4" and total == 7 and heavens_bet > 0 and seven_counter == 7:
-                    winnings = heavens_bet * 77
-                    state.chips += winnings
-                    console.print(f"[green]SEVEN'S HEAVEN! Hai vinto {winnings} fiches![/green]")
-                    banker.special_message("777")
-                elif bet_choice == "5" and total in [7, 17, 27]:  # Mystical Field
-                    winnings = side_bet * 27
-                    state.chips += winnings
-                    console.print(f"[green]MYSTICAL FIELD! Hai vinto {winnings} fiches![/green]")
-                    banker.special_message("777")
+                    won = True
                 else:
                     console.print("[red]Hai perso la scommessa aggiuntiva![/red]")
 
@@ -272,24 +255,14 @@ def play(state, banker):
                         winnings = bet_amount * 2
                         state.chips += winnings
                         console.print(f"[green]Hai vinto {winnings} fiches sulla scommessa principale![/green]")
+                        won = True
                     break
                 elif total == 7:
                     if bet_type == "2":
                         winnings = bet_amount * 2
                         state.chips += winnings
                         console.print(f"[green]Hai vinto {winnings} fiches sulla scommessa principale![/green]")
-                    banker.special_message("777")
-                    break
-
-                # Verifica Seven's Heaven
-                if heavens_bet > 0 and rolls_remaining == 0:
-                    if seven_counter == 7:
-                        winnings = heavens_bet * 77
-                        state.chips += winnings
-                        console.print(f"[green]SEVEN'S HEAVEN! Hai vinto {winnings} fiches![/green]")
-                        banker.special_message("777")
-                    else:
-                        console.print("[red]Seven's Heaven fallito![/red]")
+                        won = True
                     break
 
         if state.chips <= 0:

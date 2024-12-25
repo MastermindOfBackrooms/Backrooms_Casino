@@ -27,13 +27,13 @@ def dramatic_card_deal(card, is_banker=False):
     with Progress() as progress:
         task = progress.add_task("[cyan]", total=100)
         while not progress.finished:
-            progress.update(task, advance=2)
-            time.sleep(0.01)
+            progress.update(task, advance=1)  
+            time.sleep(0.03)  
 
     prefix = "[red]Il Banchiere[/red]" if is_banker else "[cyan]Il Punto[/cyan]"
     rank, suit = card
     console.print(f"{prefix} riceve: [white]{rank}{suit}[/white]")
-    time.sleep(0.5)
+    time.sleep(1)  
 
 def display_hand(hand, hide=False):
     if hide:
@@ -80,7 +80,7 @@ def play_punto_banco(state, banker):
         except ValueError:
             console.print("[red]Puntata non valida![/red]")
             continue
-
+    
         deck = create_deck()
         random.shuffle(deck)
 
@@ -162,6 +162,132 @@ def play_punto_banco(state, banker):
             else:
                 console.print("\n[red]Hai perso![/red]")
                 banker.lose_response()
+                state.update_chips(-bet)
+
+        if not Prompt.ask("\nVuoi giocare ancora?", choices=["s", "n"]) == "s":
+            break
+
+    state.save_game()
+
+
+def play_lightning_baccarat(state, banker):
+    banker.game_taunt('baccarat')
+
+    while True:
+        console.print("\n[green]===== LIGHTNING BACCARAT =====[/green]")
+        console.print("[yellow]Particolare: Ogni mano ha moltiplicatori casuali![/yellow]")
+        console.print(f"[yellow]Le tue fiches: {state.chips}[/yellow]")
+
+        # Generazione moltiplicatori casuali
+        lightning_multipliers = {
+            'punto': random.choice([2, 3, 4, 5, 8]),
+            'banco': random.choice([2, 3, 4, 5, 8]),
+            'pareggio': random.choice([20, 25, 30, 40, 50])
+        }
+
+        console.print("\n[yellow]Moltiplicatori Lightning:[/yellow]")
+        console.print(f"Punto: x{lightning_multipliers['punto']}")
+        console.print(f"Banco: x{lightning_multipliers['banco']}")
+        console.print(f"Pareggio: x{lightning_multipliers['pareggio']}")
+
+        bet = Prompt.ask("Inserisci la tua puntata", default="100")
+        try:
+            bet = int(bet)
+            if bet > state.chips:
+                console.print("[red]Non hai abbastanza fiches![/red]")
+                continue
+        except ValueError:
+            console.print("[red]Puntata non valida![/red]")
+            continue
+
+        # Scommessa
+        console.print("\n[yellow]Su chi vuoi scommettere?[/yellow]")
+        console.print("1. Punto")
+        console.print("2. Banco")
+        console.print("3. Pareggio")
+
+        bet_choice = Prompt.ask("Scegli", choices=["1", "2", "3"])
+
+        deck = create_deck()
+        random.shuffle(deck)
+
+        player_hand = []
+        banker_hand = []
+
+        # Distribuzione iniziale con animazione più lenta
+        for _ in range(2):
+            card = deck.pop()
+            dramatic_card_deal(card)
+            player_hand.append(card)
+
+            card = deck.pop()
+            dramatic_card_deal(card, is_banker=True)
+            banker_hand.append(card)
+
+        # Mostra i totali iniziali
+        player_total = calculate_total(player_hand)
+        banker_total = calculate_total(banker_hand)
+
+        console.print(f"\n[cyan]Mano del Punto:[/cyan] {display_hand(player_hand)} = {player_total}")
+        console.print(f"[red]Mano del Banco:[/red] {display_hand(banker_hand)} = {banker_total}")
+
+        # Regole per la terza carta con drammaticità
+        player_third = None
+        if should_draw_third_card(player_total):
+            time.sleep(1)
+            console.print("\n[cyan]Il Punto deve pescare una terza carta...[/cyan]")
+            time.sleep(1)
+            card = deck.pop()
+            dramatic_card_deal(card)
+            player_hand.append(card)
+            player_third = card_value(card)
+            player_total = calculate_total(player_hand)
+            console.print(f"[cyan]Nuovo totale del Punto:[/cyan] {player_total}")
+
+        if should_draw_third_card(banker_total, True, player_third):
+            time.sleep(1)
+            console.print("\n[red]Il Banco deve pescare una terza carta...[/red]")
+            time.sleep(1)
+            card = deck.pop()
+            dramatic_card_deal(card, is_banker=True)
+            banker_hand.append(card)
+            banker_total = calculate_total(banker_hand)
+            console.print(f"[red]Nuovo totale del Banco:[/red] {banker_total}")
+
+        # Determina il vincitore con moltiplicatori Lightning
+        console.print("\n[yellow]Risultato finale:[/yellow]")
+        console.print(f"[cyan]Punto:[/cyan] {player_total}")
+        console.print(f"[red]Banco:[/red] {banker_total}")
+
+        if bet_choice == "1":  # Punto
+            if player_total > banker_total:
+                winnings = bet * lightning_multipliers['punto']
+                console.print(f"\n[green]Hai vinto {winnings} fiches! (x{lightning_multipliers['punto']})[/green]")
+                banker.win_response('big_win')
+                state.update_chips(winnings)
+            else:
+                console.print("\n[red]Hai perso![/red]")
+                banker.lose_response('normal')
+                state.update_chips(-bet)
+        elif bet_choice == "2":  # Banco
+            if banker_total > player_total:
+                winnings = int(bet * lightning_multipliers['banco'] * 0.95)  # 5% commissione
+                console.print(f"\n[green]Hai vinto {winnings} fiches! (x{lightning_multipliers['banco']})[/green]")
+                banker.win_response('big_win')
+                state.update_chips(winnings)
+            else:
+                console.print("\n[red]Hai perso![/red]")
+                banker.lose_response('normal')
+                state.update_chips(-bet)
+        else:  # Pareggio
+            if player_total == banker_total:
+                winnings = bet * lightning_multipliers['pareggio']
+                console.print(f"\n[green]Hai vinto {winnings} fiches! (x{lightning_multipliers['pareggio']})[/green]")
+                banker.win_response('big_win')
+                state.update_chips(winnings)
+            else:
+                console.print("\n[red]Hai perso![/red]")
+                banker.lose_response('normal')
                 state.update_chips(-bet)
 
         if not Prompt.ask("\nVuoi giocare ancora?", choices=["s", "n"]) == "s":
